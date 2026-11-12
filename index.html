@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Control Financiero VE</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans pb-20">
+
+  <!-- LOGIN DE ACCESO PRIVADO -->
+  <div id="login-screen" class="fixed inset-0 bg-slate-950 z-50 flex items-center justify-center p-6">
+    <div class="bg-slate-900 border border-slate-800 p-8 rounded-3xl max-w-sm w-full space-y-6 shadow-2xl text-center">
+      <div class="w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto text-3xl">🔒</div>
+      <div>
+        <h1 class="text-xl font-bold">Acceso Privado</h1>
+        <p class="text-xs text-slate-400 mt-1">Ingresa tu PIN secreto</p>
+      </div>
+      <input type="password" id="input-pin" placeholder="••••" maxlength="10"
+        class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-center text-2xl tracking-widest focus:outline-none focus:border-emerald-500">
+      <button onclick="iniciarSesion()" id="btn-login"
+        class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-xl transition cursor-pointer">
+        Entrar a mi App
+      </button>
+      <p id="login-error" class="text-xs text-rose-400 hidden"></p>
+    </div>
+  </div>
+
+  <!-- INTERFAZ PRINCIPAL -->
+  <div id="app-content" class="max-w-4xl mx-auto p-4 md:p-6 space-y-6 hidden">
+
+    <header class="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-lg">
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-xl font-bold text-emerald-400">Mi Control VE</h1>
+          <span id="sync-badge" class="text-[11px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/20">● Sincronizado</span>
+        </div>
+        <p class="text-xs text-slate-400 mt-0.5">Conectado a Google Sheets en tiempo real</p>
+      </div>
+
+      <div class="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+        <div class="bg-slate-800 px-3.5 py-2 rounded-xl border border-slate-700">
+          <span class="text-[10px] uppercase tracking-wider text-slate-400 block">Tasa BCV Hoy</span>
+          <span id="tasa-bcv" class="text-sm font-bold text-amber-400">Cargando...</span>
+        </div>
+        <a id="link-excel" href="#" target="_blank"
+          class="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
+          📊 Ver Excel
+        </a>
+        <button onclick="cerrarSesion()" class="bg-slate-800 hover:bg-slate-700 p-2.5 rounded-xl text-slate-400 text-xs cursor-pointer">🔒</button>
+      </div>
+    </header>
+
+    <!-- TARJETAS DASHBOARD -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+        <span class="text-xs text-slate-400">Ingresos</span>
+        <p id="kpi-ingresos" class="text-xl font-bold text-blue-400 mt-1">$0.00</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+        <span class="text-xs text-slate-400">Gastos</span>
+        <p id="kpi-gastos" class="text-xl font-bold text-rose-400 mt-1">$0.00</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+        <span class="text-xs text-slate-400">Cashea Pendiente</span>
+        <p id="kpi-cashea" class="text-xl font-bold text-purple-400 mt-1">$0.00</p>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+        <span class="text-xs text-slate-400">Disponible Real</span>
+        <p id="kpi-disponible" class="text-xl font-bold text-emerald-400 mt-1">$0.00</p>
+      </div>
+    </div>
+
+    <!-- BOTONES ACCIÓN RÁPIDA -->
+    <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+      <div class="flex flex-col sm:flex-row gap-3">
+        <label class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3.5 px-4 rounded-xl text-center cursor-pointer transition shadow-lg flex items-center justify-center gap-2">
+          <span>📸 Foto a Factura (IA)</span>
+          <input type="file" accept="image/*" capture="environment" class="hidden" id="input-camara" onchange="procesarFacturaIA(event)">
+        </label>
+        <button onclick="abrirModal('modal-movimiento')" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium py-3.5 px-4 rounded-xl border border-slate-700 transition cursor-pointer">
+          ➕ Gasto / Ingreso Manual
+        </button>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <button onclick="abrirModal('modal-cashea')" class="bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 font-medium py-2.5 px-3 rounded-xl text-xs transition cursor-pointer">
+          💳 Compra Cashea
+        </button>
+        <button onclick="abrirModal('modal-deseo')" class="bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 font-medium py-2.5 px-3 rounded-xl text-xs transition cursor-pointer">
+          🎯 Añadir Deseo / Ahorro
+        </button>
+      </div>
+      <div id="ia-status" class="hidden bg-slate-800/80 border border-emerald-500/30 p-3 rounded-xl text-xs text-emerald-300 text-center animate-pulse">
+        🤖 Analizando factura con Gemini IA y calculando tasa BCV...
+      </div>
+    </div>
+
+    <!-- SECCIÓN CASHEA & DESEOS -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-purple-400">💳 Cuotas Cashea Pendientes</h2>
+        <div id="contenedor-cashea" class="space-y-2.5 text-sm">
+          <p class="text-xs text-slate-500">Sin cuotas pendientes.</p>
+        </div>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-amber-400">🎯 Metas de Compra y Ahorro</h2>
+        <div id="contenedor-deseos" class="space-y-3 text-sm">
+          <p class="text-xs text-slate-500">Aún no has agregado artículos.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- MOVIMIENTOS -->
+    <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
+      <div class="flex justify-between items-center">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">🕒 Últimos Movimientos</h2>
+        <button onclick="cargarDatosDesdeSheets()" class="text-xs text-emerald-400 hover:underline cursor-pointer">↻ Actualizar</button>
+      </div>
+      <div id="contenedor-movimientos" class="divide-y divide-slate-800 text-sm">
+        <p class="text-xs text-slate-500 py-2">Cargando...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL MOVIMIENTO -->
+  <div id="modal-movimiento" class="fixed inset-0 bg-black/75 z-40 hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4">
+      <h3 class="text-lg font-bold text-emerald-400">Registrar Movimiento</h3>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-400">Tipo</label>
+          <select id="mov-tipo" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+            <option value="Gasto">Gasto</option>
+            <option value="Ingreso">Ingreso</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Categoría</label>
+          <select id="mov-cat" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+            <option value="Comida / Mercado">Comida / Mercado</option>
+            <option value="Transporte / Gasolina">Transporte / Gasolina</option>
+            <option value="Servicios / Internet">Servicios / Internet</option>
+            <option value="Ropa / Calzado">Ropa / Calzado</option>
+            <option value="Tecnología / Setup">Tecnología / Setup</option>
+            <option value="Ocio / Salidas">Ocio / Salidas</option>
+            <option value="Otros">Otros</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400">Descripción</label>
+        <input type="text" id="mov-desc" placeholder="Ej: Supermercado..." class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-400">Monto en Bs</label>
+          <input type="number" step="0.01" id="mov-bs" placeholder="0.00" oninput="recalcularUSD()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Monto en USD ($)</label>
+          <input type="number" step="0.01" id="mov-usd" placeholder="0.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400">Método</label>
+        <input type="text" id="mov-metodo" value="Pago Móvil / Efectivo" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button onclick="cerrarModal('modal-movimiento')" class="flex-1 bg-slate-800 py-2.5 rounded-xl text-sm cursor-pointer">Cancelar</button>
+        <button onclick="guardarMovimiento()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 font-semibold py-2.5 rounded-xl text-sm cursor-pointer">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CASHEA -->
+  <div id="modal-cashea" class="fixed inset-0 bg-black/75 z-40 hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4">
+      <h3 class="text-lg font-bold text-purple-400">Nueva Compra Cashea</h3>
+      <div>
+        <label class="text-xs text-slate-400">Artículo y Tienda</label>
+        <input type="text" id="cas-articulo" placeholder="Ej: Zapatos - Tienda" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-400">Precio Total ($)</label>
+          <input type="number" step="0.01" id="cas-total" placeholder="60.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Inicial Pagada ($)</label>
+          <input type="number" step="0.01" id="cas-inicial" placeholder="24.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-400">Cuotas Restantes</label>
+          <input type="number" id="cas-cuotas" value="3" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Próxima Fecha</label>
+          <input type="date" id="cas-fecha" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+        </div>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button onclick="cerrarModal('modal-cashea')" class="flex-1 bg-slate-800 py-2.5 rounded-xl text-sm cursor-pointer">Cancelar</button>
+        <button onclick="guardarCashea()" class="flex-1 bg-purple-600 hover:bg-purple-500 font-semibold py-2.5 rounded-xl text-sm cursor-pointer">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DESEO -->
+  <div id="modal-deseo" class="fixed inset-0 bg-black/75 z-40 hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4">
+      <h3 class="text-lg font-bold text-amber-400">Nuevo Deseo / Meta</h3>
+      <div>
+        <label class="text-xs text-slate-400">Artículo</label>
+        <input type="text" id="des-nombre" placeholder="Ej: Monitor 24" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-400">Precio ($)</label>
+          <input type="number" step="0.01" id="des-precio" placeholder="120.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400">Ahorrado ($)</label>
+          <input type="number" step="0.01" id="des-ahorrado" value="0" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-slate-400">Prioridad</label>
+        <select id="des-prioridad" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+          <option value="Alta">Alta</option>
+          <option value="Media">Media</option>
+          <option value="Baja">Baja</option>
+        </select>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button onclick="cerrarModal('modal-deseo')" class="flex-1 bg-slate-800 py-2.5 rounded-xl text-sm cursor-pointer">Cancelar</button>
+        <button onclick="guardarDeseo()" class="flex-1 bg-amber-600 hover:bg-amber-500 font-semibold py-2.5 rounded-xl text-sm cursor-pointer">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // TUS CONFIGURACIONES (PEGA AQUÍ TUS DATOS)
+    // ==========================================
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyZ9L05bqYmBSJ_qDB0l2nsvC61VY9pvRRwcDFSkUzmI-VXfDSwaqBnArKqLwaNtdwn/exec";
+    const GOOGLE_SHEET_URL = "PEGA_AQUI_EL_LINK_DE_TU_GOOGLE_SHEET";
+    const GEMINI_API_KEY = "PEGA_AQUI_TU_API_KEY_DE_GEMINI";
+
+    let tasaBCV = 0;
+    let userPin = localStorage.getItem("app_gastos_pin") || "";
+    document.getElementById("link-excel").href = GOOGLE_SHEET_URL;
+
+    window.onload = async () => {
+      await obtenerTasaBCV();
+      if (userPin) {
+        document.getElementById("input-pin").value = userPin;
+        iniciarSesion();
+      }
+    };
+
+    async function obtenerTasaBCV() {
+      try {
+        const res = await fetch("https://ve.dolarapi.com/v1/dolares/bcv");
+        const data = await res.json();
+        tasaBCV = parseFloat(data.promedio) || 45.50;
+        document.getElementById("tasa-bcv").innerText = `Bs. ${tasaBCV.toFixed(2)}`;
+      } catch (e) {
+        tasaBCV = 45.50;
+        document.getElementById("tasa-bcv").innerText = "Bs. Offline";
+      }
+    }
+
+    async function iniciarSesion() {
+      const pin = document.getElementById("input-pin").value.trim();
+      if (!pin) return;
+      const btn = document.getElementById("btn-login");
+      btn.innerText = "Conectando...";
+      
+      try {
+        const res = await fetch(`${APPS_SCRIPT_URL}?pin=${encodeURIComponent(pin)}`);
+        const data = await res.json();
+        if (data.error) {
+          document.getElementById("login-error").innerText = data.error;
+          document.getElementById("login-error").classList.remove("hidden");
+          btn.innerText = "Entrar a mi App";
+          return;
+        }
+        userPin = pin;
+        localStorage.setItem("app_gastos_pin", userPin);
+        document.getElementById("login-screen").classList.add("hidden");
+        document.getElementById("app-content").classList.remove("hidden");
+        renderizarDashboard(data);
+      } catch (err) {
+        document.getElementById("login-error").innerText = "Error de conexión.";
+        document.getElementById("login-error").classList.remove("hidden");
+        btn.innerText = "Entrar a mi App";
+      }
+    }
+
+    function cerrarSesion() {
+      localStorage.removeItem("app_gastos_pin");
+      location.reload();
+    }
+
+    async function cargarDatosDesdeSheets() {
+      document.getElementById("sync-badge").innerText = "↻ Sincronizando...";
+      const res = await fetch(`${APPS_SCRIPT_URL}?pin=${encodeURIComponent(userPin)}`);
+      const data = await res.json();
+      if (!data.error) {
+        renderizarDashboard(data);
+        document.getElementById("sync-badge").innerText = "● Sincronizado";
+      }
+    }
+
+    function renderizarDashboard(data) {
+      let ingresos = 0, gastos = 0, casheaPendiente = 0, totalAhorradoDeseos = 0;
+      
+      const contMov = document.getElementById("contenedor-movimientos");
+      contMov.innerHTML = "";
+      (data.movimientos || []).slice().reverse().forEach(m => {
+        const tipo = m[1], usd = parseFloat(m[6]) || 0, bs = parseFloat(m[4]) || 0;
+        if (tipo === "Ingreso") ingresos += usd;
+        if (tipo === "Gasto") gastos += usd;
+        contMov.innerHTML += `
+          <div class="py-3 flex justify-between items-center gap-3">
+            <div>
+              <p class="font-medium text-slate-200">${m[3] || m[2]}</p>
+              <span class="text-xs text-slate-400">${m[0]} • ${m[2]} ${bs > 0 ? `(Bs. ${bs.toFixed(2)})` : ""}</span>
+            </div>
+            <span class="font-bold ${tipo === 'Ingreso' ? 'text-blue-400' : 'text-rose-400'}">
+              ${tipo === 'Ingreso' ? '+' : '-'}$${usd.toFixed(2)}
+            </span>
+          </div>`;
+      });
+
+      const contCas = document.getElementById("contenedor-cashea");
+      contCas.innerHTML = "";
+      (data.cashea || []).forEach(c => {
+        const pendiente = parseFloat(c[7]) || 0;
+        if (c[8] === "Pendiente" && pendiente > 0) {
+          casheaPendiente += pendiente;
+          contCas.innerHTML += `
+            <div class="bg-slate-800/60 border border-slate-700/60 p-3 rounded-xl flex justify-between items-center">
+              <div>
+                <p class="font-semibold text-slate-200">${c[1]}</p>
+                <span class="text-xs text-amber-400">Próximo pago: ${c[6]} • Cuota: $${parseFloat(c[5]).toFixed(2)}</span>
+              </div>
+              <span class="font-bold text-purple-300">$${pendiente.toFixed(2)}</span>
+            </div>`;
+        }
+      });
+
+      const contDes = document.getElementById("contenedor-deseos");
+      contDes.innerHTML = "";
+      (data.deseos || []).forEach(d => {
+        const precio = parseFloat(d[1]) || 0, ahorrado = parseFloat(d[2]) || 0;
+        const pct = precio > 0 ? Math.min(100, Math.round((ahorrado / precio) * 100)) : 0;
+        totalAhorradoDeseos += ahorrado;
+        contDes.innerHTML += `
+          <div class="bg-slate-800/60 border border-slate-700/60 p-3 rounded-xl space-y-1.5">
+            <div class="flex justify-between">
+              <span class="font-semibold text-slate-200">${d[0]}</span>
+              <span class="text-xs text-slate-400">$${ahorrado.toFixed(2)} / $${precio.toFixed(2)}</span>
+            </div>
+            <div class="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
+              <div class="bg-amber-400 h-full" style="width: ${pct}%"></div>
+            </div>
+            <div class="flex justify-between text-[11px] text-slate-400">
+              <span>Prioridad: ${d[5]}</span>
+              <span>${pct}% completado</span>
+            </div>
+          </div>`;
+      });
+
+      document.getElementById("kpi-ingresos").innerText = `$${ingresos.toFixed(2)}`;
+      document.getElementById("kpi-gastos").innerText = `$${gastos.toFixed(2)}`;
+      document.getElementById("kpi-cashea").innerText = `$${casheaPendiente.toFixed(2)}`;
+      document.getElementById("kpi-disponible").innerText = `$${(ingresos - gastos - totalAhorradoDeseos).toFixed(2)}`;
+    }
+
+    async function procesarFacturaIA(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const statusBox = document.getElementById("ia-status");
+      statusBox.classList.remove("hidden");
+
+      try {
+        const base64 = await convertirABase64(file);
+        const prompt = `Analiza esta factura. Devuelve ÚNICAMENTE un JSON válido: {"descripcion": "Comercio y resumen", "categoria": "Comida / Mercado", "moneda": "VES o USD", "monto_total": 0.00}`;
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: file.type, data: base64 } }] }] })
+        });
+        const json = await res.json();
+        const data = JSON.parse(json.candidates[0].content.parts[0].text.replace(/```json|```/g, "").trim());
+
+        document.getElementById("mov-tipo").value = "Gasto";
+        document.getElementById("mov-cat").value = data.categoria || "Otros";
+        document.getElementById("mov-desc").value = data.descripcion || "Factura IA";
+        document.getElementById("mov-metodo").value = "Foto Factura";
+
+        if (data.moneda === "VES") {
+          document.getElementById("mov-bs").value = data.monto_total;
+          recalcularUSD();
+        } else {
+          document.getElementById("mov-bs").value = 0;
+          document.getElementById("mov-usd").value = data.monto_total;
+        }
+        statusBox.classList.add("hidden");
+        abrirModal("modal-movimiento");
+      } catch (e) {
+        statusBox.innerText = "❌ Error al leer la factura.";
+        setTimeout(() => statusBox.classList.add("hidden"), 3000);
+      }
+    }
+
+    function recalcularUSD() {
+      const bs = parseFloat(document.getElementById("mov-bs").value) || 0;
+      if (bs > 0 && tasaBCV > 0) document.getElementById("mov-usd").value = (bs / tasaBCV).toFixed(2);
+    }
+
+    async function enviarFilaASheets(pestana, fila) {
+      document.getElementById("sync-badge").innerText = "↑ Guardando...";
+      await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: userPin, pestana: pestana, fila: fila })
+      });
+      setTimeout(cargarDatosDesdeSheets, 1500);
+    }
+
+    async function guardarMovimiento() {
+      const ahora = new Date().toLocaleString("sv-SE").slice(0, 16);
+      const tipo = document.getElementById("mov-tipo").value;
+      const cat = document.getElementById("mov-cat").value;
+      const desc = document.getElementById("mov-desc").value;
+      const bs = parseFloat(document.getElementById("mov-bs").value) || 0;
+      const usd = parseFloat(document.getElementById("mov-usd").value) || 0;
+      const metodo = document.getElementById("mov-metodo").value;
+      cerrarModal("modal-movimiento");
+      await enviarFilaASheets("Movimientos", [ahora, tipo, cat, desc, bs, tasaBCV, usd, metodo]);
+    }
+
+    async function guardarCashea() {
+      const hoy = new Date().toISOString().split("T")[0];
+      const art = document.getElementById("cas-articulo").value;
+      const total = parseFloat(document.getElementById("cas-total").value) || 0;
+      const inicial = parseFloat(document.getElementById("cas-inicial").value) || 0;
+      const cuotas = parseInt(document.getElementById("cas-cuotas").value) || 3;
+      const fechaProx = document.getElementById("cas-fecha").value;
+      const pendiente = total - inicial;
+      const montoCuota = cuotas > 0 ? pendiente / cuotas : 0;
+      cerrarModal("modal-cashea");
+      await enviarFilaASheets("Cashea", [hoy, art, total, inicial, cuotas, montoCuota, fechaProx, pendiente, "Pendiente"]);
+    }
+
+    async function guardarDeseo() {
+      const nombre = document.getElementById("des-nombre").value;
+      const precio = parseFloat(document.getElementById("des-precio").value) || 0;
+      const ahorrado = parseFloat(document.getElementById("des-ahorrado").value) || 0;
+      const prioridad = document.getElementById("des-prioridad").value;
+      const falta = Math.max(0, precio - ahorrado);
+      const pct = precio > 0 ? ahorrado / precio : 0;
+      cerrarModal("modal-deseo");
+      await enviarFilaASheets("Deseos", [nombre, precio, ahorrado, falta, pct, prioridad, falta / 4]);
+    }
+
+    function abrirModal(id) { document.getElementById(id).classList.replace("hidden", "flex"); }
+    function cerrarModal(id) { document.getElementById(id).classList.replace("flex", "hidden"); }
+    function convertirABase64(file) {
+      return new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result.split(",")[1]);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+    }
+  </script>
+</body>
+</html>
