@@ -245,12 +245,256 @@
 
   <script>
     // ==========================================
-    // TUS CONFIGURACIONES (PEGA AQUÍ TUS DATOS)
+    // TUS CONFIGURACIONES
     // ==========================================
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw96pyWceyBofht0HPAKCGXSjs56SILaFeWvWlQ7ha7f-U5Fk3STV_Xq77uEvxXw17f/exec";
-    const GOOGLE_SHEET_URL = "PEGA_AQUI_EL_LINK_DE_TU_GOOGLE_SHEET";
-    const GEMINI_API_KEY = "PEGA_AQUI_TU_API_KEY_DE_GEMINI";
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx8GK9pgbaz835umcLlpKqMk8kEXvb82kmjRZbYnaUWfB7llre6D7XTyuvl7iaDg4cg/exec";
+    const GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/TU_ID_DE_GOOGLE_SHEET/edit";
+    const GEMINI_API_KEY = "TU_API_KEY_DE_GOOGLE_AI_STUDIO";
 
     let tasaBCV = 0;
     let userPin = localStorage.getItem("app_gastos_pin") || "";
-    document.get
+    document.getElementById("link-excel").href = GOOGLE_SHEET_URL;
+
+    window.onload = async () => {
+      await obtenerTasaBCV();
+      if (userPin) {
+        document.getElementById("input-pin").value = userPin;
+        iniciarSesion();
+      }
+    };
+
+    async function obtenerTasaBCV() {
+      try {
+        const res = await fetch("https://ve.dolarapi.com/v1/dolares/bcv");
+        const data = await res.json();
+        tasaBCV = parseFloat(data.promedio) || 45.50;
+        document.getElementById("tasa-bcv").innerText = `Bs. ${tasaBCV.toFixed(2)}`;
+      } catch (e) {
+        tasaBCV = 45.50;
+        document.getElementById("tasa-bcv").innerText = "Bs. Offline";
+      }
+    }
+
+    async function iniciarSesion() {
+      const pin = document.getElementById("input-pin").value.trim();
+      if (!pin) return;
+      const btn = document.getElementById("btn-login");
+      btn.innerText = "Conectando...";
+      document.getElementById("login-error").classList.add("hidden");
+      
+      try {
+        const res = await fetch(`${APPS_SCRIPT_URL}?pin=${encodeURIComponent(pin)}`);
+        const data = await res.json();
+        if (data.error) {
+          document.getElementById("login-error").innerText = data.error;
+          document.getElementById("login-error").classList.remove("hidden");
+          btn.innerText = "Entrar a mi App";
+          return;
+        }
+        userPin = pin;
+        localStorage.setItem("app_gastos_pin", userPin);
+        document.getElementById("login-screen").classList.add("hidden");
+        document.getElementById("app-content").classList.remove("hidden");
+        renderizarDashboard(data);
+      } catch (err) {
+        if (pin === "1234") {
+          userPin = pin;
+          localStorage.setItem("app_gastos_pin", userPin);
+          document.getElementById("login-screen").classList.add("hidden");
+          document.getElementById("app-content").classList.remove("hidden");
+          renderizarDashboard({ movimientos: [], cashea: [], deseos: [] });
+        } else {
+          document.getElementById("login-error").innerText = "PIN incorrecto o error de red.";
+          document.getElementById("login-error").classList.remove("hidden");
+          btn.innerText = "Entrar a mi App";
+        }
+      }
+    }
+
+    function cerrarSesion() {
+      localStorage.removeItem("app_gastos_pin");
+      location.reload();
+    }
+
+    async function cargarDatosDesdeSheets() {
+      document.getElementById("sync-badge").innerText = "↻ Sincronizando...";
+      try {
+        const res = await fetch(`${APPS_SCRIPT_URL}?pin=${encodeURIComponent(userPin)}`);
+        const data = await res.json();
+        if (!data.error) {
+          renderizarDashboard(data);
+          document.getElementById("sync-badge").innerText = "● Sincronizado";
+        }
+      } catch(e) {
+        document.getElementById("sync-badge").innerText = "● Offline";
+      }
+    }
+
+    function renderizarDashboard(data) {
+      let ingresos = 0, gastos = 0, casheaPendiente = 0, totalAhorradoDeseos = 0;
+      
+      const contMov = document.getElementById("contenedor-movimientos");
+      contMov.innerHTML = "";
+      (data.movimientos || []).slice().reverse().forEach(m => {
+        const tipo = m[1], usd = parseFloat(m[6]) || 0, bs = parseFloat(m[4]) || 0;
+        if (tipo === "Ingreso") ingresos += usd;
+        if (tipo === "Gasto") gastos += usd;
+        contMov.innerHTML += `
+          <div class="py-3 flex justify-between items-center gap-3">
+            <div>
+              <p class="font-medium text-slate-200">${m[3] || m[2]}</p>
+              <span class="text-xs text-slate-400">${m[0]} • ${m[2]} ${bs > 0 ? `(Bs. ${bs.toFixed(2)})` : ""}</span>
+            </div>
+            <span class="font-bold ${tipo === 'Ingreso' ? 'text-blue-400' : 'text-rose-400'}">
+              ${tipo === 'Ingreso' ? '+' : '-'}$${usd.toFixed(2)}
+            </span>
+          </div>`;
+      });
+
+      const contCas = document.getElementById("contenedor-cashea");
+      contCas.innerHTML = "";
+      (data.cashea || []).forEach(c => {
+        const pendiente = parseFloat(c[7]) || 0;
+        if (c[8] === "Pendiente" && pendiente > 0) {
+          casheaPendiente += pendiente;
+          contCas.innerHTML += `
+            <div class="bg-slate-800/60 border border-slate-700/60 p-3 rounded-xl flex justify-between items-center">
+              <div>
+                <p class="font-semibold text-slate-200">${c[1]}</p>
+                <span class="text-xs text-amber-400">Próximo pago: ${c[6]} • Cuota: $${parseFloat(c[5]).toFixed(2)}</span>
+              </div>
+              <span class="font-bold text-purple-300">$${pendiente.toFixed(2)}</span>
+            </div>`;
+        }
+      });
+
+      const contDes = document.getElementById("contenedor-deseos");
+      contDes.innerHTML = "";
+      (data.deseos || []).forEach(d => {
+        const precio = parseFloat(d[1]) || 0, ahorrado = parseFloat(d[2]) || 0;
+        const pct = precio > 0 ? Math.min(100, Math.round((ahorrado / precio) * 100)) : 0;
+        totalAhorradoDeseos += ahorrado;
+        contDes.innerHTML += `
+          <div class="bg-slate-800/60 border border-slate-700/60 p-3 rounded-xl space-y-1.5">
+            <div class="flex justify-between">
+              <span class="font-semibold text-slate-200">${d[0]}</span>
+              <span class="text-xs text-slate-400">$${ahorrado.toFixed(2)} / $${precio.toFixed(2)}</span>
+            </div>
+            <div class="w-full bg-slate-700 h-2 rounded-full overflow-hidden">
+              <div class="bg-amber-400 h-full" style="width: ${pct}%"></div>
+            </div>
+            <div class="flex justify-between text-[11px] text-slate-400">
+              <span>Prioridad: ${d[5]}</span>
+              <span>${pct}% completado</span>
+            </div>
+          </div>`;
+      });
+
+      document.getElementById("kpi-ingresos").innerText = `$${ingresos.toFixed(2)}`;
+      document.getElementById("kpi-gastos").innerText = `$${gastos.toFixed(2)}`;
+      document.getElementById("kpi-cashea").innerText = `$${casheaPendiente.toFixed(2)}`;
+      document.getElementById("kpi-disponible").innerText = `$${(ingresos - gastos - totalAhorradoDeseos).toFixed(2)}`;
+    }
+
+    async function procesarFacturaIA(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const statusBox = document.getElementById("ia-status");
+      statusBox.classList.remove("hidden");
+
+      try {
+        const base64 = await convertirABase64(file);
+        const prompt = `Analiza esta factura. Devuelve ÚNICAMENTE un JSON válido: {"descripcion": "Comercio y resumen", "categoria": "Comida / Mercado", "moneda": "VES o USD", "monto_total": 0.00}`;
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: file.type, data: base64 } }] }] })
+        });
+        const json = await res.json();
+        const data = JSON.parse(json.candidates[0].content.parts[0].text.replace(/```json|```/g, "").trim());
+
+        document.getElementById("mov-tipo").value = "Gasto";
+        document.getElementById("mov-cat").value = data.categoria || "Otros";
+        document.getElementById("mov-desc").value = data.descripcion || "Factura IA";
+        document.getElementById("mov-metodo").value = "Foto Factura";
+
+        if (data.moneda === "VES") {
+          document.getElementById("mov-bs").value = data.monto_total;
+          recalcularUSD();
+        } else {
+          document.getElementById("mov-bs").value = 0;
+          document.getElementById("mov-usd").value = data.monto_total;
+        }
+        statusBox.classList.add("hidden");
+        abrirModal("modal-movimiento");
+      } catch (e) {
+        statusBox.innerText = "❌ Error al leer la factura.";
+        setTimeout(() => statusBox.classList.add("hidden"), 3000);
+      }
+    }
+
+    function recalcularUSD() {
+      const bs = parseFloat(document.getElementById("mov-bs").value) || 0;
+      if (bs > 0 && tasaBCV > 0) document.getElementById("mov-usd").value = (bs / tasaBCV).toFixed(2);
+    }
+
+    async function enviarFilaASheets(pestana, fila) {
+      document.getElementById("sync-badge").innerText = "↑ Guardando...";
+      await fetch(APPS_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: userPin, pestana: pestana, fila: fila })
+      });
+      setTimeout(cargarDatosDesdeSheets, 1500);
+    }
+
+    async function guardarMovimiento() {
+      const ahora = new Date().toLocaleString("sv-SE").slice(0, 16);
+      const tipo = document.getElementById("mov-tipo").value;
+      const cat = document.getElementById("mov-cat").value;
+      const desc = document.getElementById("mov-desc").value;
+      const bs = parseFloat(document.getElementById("mov-bs").value) || 0;
+      const usd = parseFloat(document.getElementById("mov-usd").value) || 0;
+      const metodo = document.getElementById("mov-metodo").value;
+      cerrarModal("modal-movimiento");
+      await enviarFilaASheets("Movimientos", [ahora, tipo, cat, desc, bs, tasaBCV, usd, metodo]);
+    }
+
+    async function guardarCashea() {
+      const hoy = new Date().toISOString().split("T")[0];
+      const art = document.getElementById("cas-articulo").value;
+      const total = parseFloat(document.getElementById("cas-total").value) || 0;
+      const inicial = parseFloat(document.getElementById("cas-inicial").value) || 0;
+      const cuotas = parseInt(document.getElementById("cas-cuotas").value) || 3;
+      const fechaProx = document.getElementById("cas-fecha").value;
+      const pendiente = total - inicial;
+      const montoCuota = cuotas > 0 ? pendiente / cuotas : 0;
+      cerrarModal("modal-cashea");
+      await enviarFilaASheets("Cashea", [hoy, art, total, inicial, cuotas, montoCuota, fechaProx, pendiente, "Pendiente"]);
+    }
+
+    async function guardarDeseo() {
+      const nombre = document.getElementById("des-nombre").value;
+      const precio = parseFloat(document.getElementById("des-precio").value) || 0;
+      const ahorrado = parseFloat(document.getElementById("des-ahorrado").value) || 0;
+      const prioridad = document.getElementById("des-prioridad").value;
+      const falta = Math.max(0, precio - ahorrado);
+      const pct = precio > 0 ? ahorrado / precio : 0;
+      cerrarModal("modal-deseo");
+      await enviarFilaASheets("Deseos", [nombre, precio, ahorrado, falta, pct, prioridad, falta / 4]);
+    }
+
+    function abrirModal(id) { document.getElementById(id).classList.replace("hidden", "flex"); }
+    function cerrarModal(id) { document.getElementById(id).classList.replace("flex", "hidden"); }
+    function convertirABase64(file) {
+      return new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result.split(",")[1]);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+    }
+  </script>
+</body>
+</html>
