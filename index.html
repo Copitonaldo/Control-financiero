@@ -84,10 +84,10 @@
           ➕ Gasto / Ingreso Manual
         </button>
       </div>
-      <p class="text-xs text-slate-400 text-center">Sube captures de Pago Móvil, saldos, cuotas Cashea o fotos de productos que quieras comprar y la IA lo organizará solo.</p>
+      <p class="text-xs text-slate-400 text-center">Sube captures de Pago Móvil, saldos, cuotas Cashea o fotos de productos que quieras comprar.</p>
       
       <div id="ia-status" class="hidden bg-slate-800/80 border border-emerald-500/30 p-3 rounded-xl text-xs text-emerald-300 text-center animate-pulse">
-        🤖 Analizando imagen con Gemini IA y calculando a tasa BCV...
+        🤖 Analizando imagen con Gemini IA...
       </div>
     </div>
 
@@ -233,7 +233,7 @@
       </div>
       <div class="flex gap-3 pt-2">
         <button onclick="cerrarModal('modal-deseo')" class="flex-1 bg-slate-800 py-2.5 rounded-xl text-sm cursor-pointer">Cancelar</button>
-        <button onclick="guardarDeseo()" class="flex-1 bg-amber-600 hover:bg-amber-500 font-semibold py-2.5 rounded-xl text-sm cursor-pointer">Guardar</button>
+        <button onclick="guardarDeso()" class="flex-1 bg-amber-600 hover:bg-amber-500 font-semibold py-2.5 rounded-xl text-sm cursor-pointer">Guardar</button>
       </div>
     </div>
   </div>
@@ -403,98 +403,58 @@
     }
 
     // ==========================================
-    // ESCÁNER INTELIGENTE UNIVERSAL (IA)
+    // ESCÁNER INTELIGENTE CON RESPALDO MANUAL
     // ==========================================
     async function procesarCapUniversalIA(event) {
       const file = event.target.files[0];
       if (!file) return;
       const statusBox = document.getElementById("ia-status");
-      statusBox.innerText = "🤖 Escaneando imagen e interpretando con Gemini IA...";
+      statusBox.innerText = "🤖 Escaneando imagen con IA...";
       statusBox.classList.remove("hidden");
 
       try {
         const base64 = await convertirABase64(file);
-        const prompt = `Analiza esta imagen. Puede ser:
-1. Un capture bancario, pago móvil recibido o enviado, o factura (MOVIMIENTO).
-2. Un capture de la app Cashea mostrando una compra o cuotas (CASHEA).
-3. Una foto o captura de un producto/artículo que el usuario quiera comprar con su precio (DESEO).
-
-Devuelve ÚNICAMENTE un JSON válido sin texto adicional con esta estructura:
+        const prompt = `Analiza esta imagen y devuelve ÚNICAMENTE un JSON válido sin texto adicional:
 {
-  "tipo_registro": "MOVIMIENTO o CASHEA o DESEO",
+  "tipo_registro": "MOVIMIENTO",
   "movimiento": {
-    "tipo": "Ingreso o Gasto",
-    "categoria": "Comida / Mercado | Transporte / Gasolina | Servicios / Internet | Ropa / Calzado | Tecnología / Setup | Ocio / Salidas | Pago / Ingreso | Otros",
-    "descripcion": "Resumen o comercio",
-    "moneda": "VES o USD",
-    "monto": 0.00,
-    "metodo": "Pago Móvil / Transferencia / Efectivo"
-  },
-  "cashea": {
-    "articulo": "Nombre del artículo o tienda",
-    "precio_total_usd": 0.00,
-    "inicial_pagada_usd": 0.00,
-    "cuotas_restantes": 3,
-    "proxima_fecha": "YYYY-MM-DD"
-  },
-  "deseo": {
-    "articulo": "Nombre del producto",
-    "moneda": "USD o VES",
-    "precio": 0.00
+    "tipo": "Gasto",
+    "categoria": "Otros",
+    "descripcion": "Capture IA",
+    "moneda": "USD",
+    "monto": 0,
+    "metodo": "Pago Móvil"
   }
 }`;
 
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        // Usamos el modelo gemini-1.5-flash estándar de mayor compatibilidad
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: file.type, data: base64 } }] }] })
         });
         
+        if (!res.ok) throw new Error("Error de API Gemini");
+
         const json = await res.json();
         const rawText = json.candidates[0].content.parts[0].text.replace(/```json|```/g, "").trim();
         const data = JSON.parse(rawText);
 
         statusBox.classList.add("hidden");
+        const mov = data.movimiento || {};
+        document.getElementById("mov-tipo").value = mov.tipo || "Gasto";
+        document.getElementById("mov-cat").value = mov.categoria || "Otros";
+        document.getElementById("mov-desc").value = mov.descripcion || "Capture IA";
+        document.getElementById("mov-usd").value = mov.monto || 0;
+        abrirModal("modal-movimiento");
 
-        if (data.tipo_registro === "CASHEA" && data.cashea) {
-          document.getElementById("cas-articulo").value = data.cashea.articulo || "Compra Cashea";
-          document.getElementById("cas-total").value = data.cashea.precio_total_usd || 0;
-          document.getElementById("cas-inicial").value = data.cashea.inicial_pagada_usd || 0;
-          document.getElementById("cas-cuotas").value = data.cashea.cuotas_restantes || 3;
-          if (data.cashea.proxima_fecha) {
-            document.getElementById("cas-fecha").value = data.cashea.proxima_fecha;
-          }
-          abrirModal("modal-cashea");
-
-        } else if (data.tipo_registro === "DESEO" && data.deseo) {
-          document.getElementById("des-nombre").value = data.deseo.articulo || "Artículo deseado";
-          let precioUSD = parseFloat(data.deseo.precio) || 0;
-          if (data.deseo.moneda === "VES" && tasaBCV > 0) {
-            precioUSD = parseFloat((precioUSD / tasaBCV).toFixed(2));
-          }
-          document.getElementById("des-precio").value = precioUSD;
-          document.getElementById("des-ahorrado").value = 0;
-          abrirModal("modal-deseo");
-
-        } else {
-          const mov = data.movimiento || {};
-          document.getElementById("mov-tipo").value = mov.tipo === "Ingreso" ? "Ingreso" : "Gasto";
-          document.getElementById("mov-cat").value = mov.categoria || "Otros";
-          document.getElementById("mov-desc").value = mov.descripcion || "Capture IA";
-          document.getElementById("mov-metodo").value = mov.metodo || "Capture / Pago Móvil";
-
-          if (mov.moneda === "VES") {
-            document.getElementById("mov-bs").value = mov.monto || 0;
-            recalcularUSD();
-          } else {
-            document.getElementById("mov-bs").value = 0;
-            document.getElementById("mov-usd").value = mov.monto || 0;
-          }
-          abrirModal("modal-movimiento");
-        }
       } catch (e) {
-        statusBox.innerText = "❌ Error al leer la imagen. Revisa tu API Key de Gemini.";
-        setTimeout(() => statusBox.classList.add("hidden"), 4000);
+        // RESPALDO INTELIGENTE: Si la IA falla, abre el formulario manual limpio de inmediato
+        statusBox.classList.add("hidden");
+        document.getElementById("mov-desc").value = "Capture / Factura manual";
+        document.getElementById("mov-usd").value = "";
+        document.getElementById("mov-bs").value = "";
+        abrirModal("modal-movimiento");
       } finally {
         event.target.value = "";
       }
