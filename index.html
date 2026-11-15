@@ -77,18 +77,14 @@
     <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
       <div class="flex flex-col sm:flex-row gap-3">
         <label class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-4 px-4 rounded-xl text-center cursor-pointer transition shadow-lg flex items-center justify-center gap-2 text-base">
-          <span>📸 Subir Cap / Foto (IA Automática)</span>
-          <input type="file" accept="image/*" class="hidden" id="input-camara" onchange="procesarCapUniversalIA(event)">
+          <span>📸 Subir Cap / Foto (Rápido)</span>
+          <input type="file" accept="image/*" class="hidden" id="input-camara" onchange="procesarCapRapido(event)">
         </label>
         <button onclick="abrirModal('modal-movimiento')" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium py-4 px-4 rounded-xl border border-slate-700 transition cursor-pointer text-base">
           ➕ Gasto / Ingreso Manual
         </button>
       </div>
-      <p class="text-xs text-slate-400 text-center">Sube captures de Pago Móvil, saldos, cuotas Cashea o fotos de productos que quieras comprar.</p>
-      
-      <div id="ia-status" class="hidden bg-slate-800/80 border border-emerald-500/30 p-3 rounded-xl text-xs text-emerald-300 text-center animate-pulse">
-        🤖 Analizando imagen con Gemini IA...
-      </div>
+      <p class="text-xs text-slate-400 text-center">Sube tu capture y registra al instante calculando tu tasa BCV de forma automática.</p>
     </div>
 
     <!-- SECCIÓN CASHEA & DESEOS -->
@@ -98,12 +94,18 @@
         <div id="contenedor-cashea" class="space-y-2.5 text-sm">
           <p class="text-xs text-slate-500">Sin cuotas pendientes.</p>
         </div>
+        <button onclick="abrirModal('modal-cashea')" class="w-full bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 font-medium py-2 rounded-xl text-xs transition cursor-pointer mt-2">
+          + Registrar Compra Cashea
+        </button>
       </div>
       <div class="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
         <h2 class="text-sm font-bold uppercase tracking-wider text-amber-400">🎯 Metas de Compra y Ahorro</h2>
         <div id="contenedor-deseos" class="space-y-3 text-sm">
           <p class="text-xs text-slate-500">Aún no has agregado artículos.</p>
         </div>
+        <button onclick="abrirModal('modal-deseo')" class="w-full bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 font-medium py-2 rounded-xl text-xs transition cursor-pointer mt-2">
+          + Añadir Deseo / Ahorro
+        </button>
       </div>
     </div>
 
@@ -146,8 +148,8 @@
         </div>
       </div>
       <div>
-        <label class="text-xs text-slate-400">Descripción</label>
-        <input type="text" id="mov-desc" placeholder="Ej: Supermercado..." class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
+        <label class="text-xs text-slate-400">Descripción / Comercio</label>
+        <input type="text" id="mov-desc" placeholder="Ej: Pago Móvil / Supermercado..." class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-sm mt-1">
       </div>
       <div class="grid grid-cols-2 gap-3">
         <div>
@@ -233,18 +235,17 @@
       </div>
       <div class="flex gap-3 pt-2">
         <button onclick="cerrarModal('modal-deseo')" class="flex-1 bg-slate-800 py-2.5 rounded-xl text-sm cursor-pointer">Cancelar</button>
-        <button onclick="guardarDeso()" class="flex-1 bg-amber-600 hover:bg-amber-500 font-semibold py-2.5 rounded-xl text-sm cursor-pointer">Guardar</button>
+        <button onclick="guardarDeseo()" class="flex-1 bg-amber-600 hover:bg-amber-500 font-semibold py-2.5 rounded-xl text-sm cursor-pointer">Guardar</button>
       </div>
     </div>
   </div>
 
   <script>
     // ==========================================
-    // TUS CONFIGURACIONES
+    // CONFIGURACIÓN
     // ==========================================
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx8GK9pgbaz835umcLlpKqMk8kEXvb82kmjRZbYnaUWfB7llre6D7XTyuvl7iaDg4cg/exec";
     const GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/TU_ID_DE_GOOGLE_SHEET/edit";
-    const GEMINI_API_KEY = "AQ.Ab8RN6Ka7TziKe007uhQBksvI_EKRGr6hKc6QxlOWWtLKnP9zA";
 
     let tasaBCV = 0;
     let userPin = localStorage.getItem("app_gastos_pin") || "";
@@ -402,62 +403,15 @@
       document.getElementById("kpi-disponible").innerText = `$${(ingresos - gastos - totalAhorradoDeseos).toFixed(2)}`;
     }
 
-    // ==========================================
-    // ESCÁNER INTELIGENTE CON RESPALDO MANUAL
-    // ==========================================
-    async function procesarCapUniversalIA(event) {
+    function procesarCapRapido(event) {
       const file = event.target.files[0];
       if (!file) return;
-      const statusBox = document.getElementById("ia-status");
-      statusBox.innerText = "🤖 Escaneando imagen con IA...";
-      statusBox.classList.remove("hidden");
-
-      try {
-        const base64 = await convertirABase64(file);
-        const prompt = `Analiza esta imagen y devuelve ÚNICAMENTE un JSON válido sin texto adicional:
-{
-  "tipo_registro": "MOVIMIENTO",
-  "movimiento": {
-    "tipo": "Gasto",
-    "categoria": "Otros",
-    "descripcion": "Capture IA",
-    "moneda": "USD",
-    "monto": 0,
-    "metodo": "Pago Móvil"
-  }
-}`;
-
-        // Usamos el modelo gemini-1.5-flash estándar de mayor compatibilidad
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: file.type, data: base64 } }] }] })
-        });
-        
-        if (!res.ok) throw new Error("Error de API Gemini");
-
-        const json = await res.json();
-        const rawText = json.candidates[0].content.parts[0].text.replace(/```json|```/g, "").trim();
-        const data = JSON.parse(rawText);
-
-        statusBox.classList.add("hidden");
-        const mov = data.movimiento || {};
-        document.getElementById("mov-tipo").value = mov.tipo || "Gasto";
-        document.getElementById("mov-cat").value = mov.categoria || "Otros";
-        document.getElementById("mov-desc").value = mov.descripcion || "Capture IA";
-        document.getElementById("mov-usd").value = mov.monto || 0;
-        abrirModal("modal-movimiento");
-
-      } catch (e) {
-        // RESPALDO INTELIGENTE: Si la IA falla, abre el formulario manual limpio de inmediato
-        statusBox.classList.add("hidden");
-        document.getElementById("mov-desc").value = "Capture / Factura manual";
-        document.getElementById("mov-usd").value = "";
-        document.getElementById("mov-bs").value = "";
-        abrirModal("modal-movimiento");
-      } finally {
-        event.target.value = "";
-      }
+      // Abre de inmediato el modal limpio listo para poner montos y guardar
+      document.getElementById("mov-desc").value = "Capture / Pago Móvil";
+      document.getElementById("mov-bs").value = "";
+      document.getElementById("mov-usd").value = "";
+      abrirModal("modal-movimiento");
+      event.target.value = "";
     }
 
     function recalcularUSD() {
@@ -514,14 +468,6 @@
 
     function abrirModal(id) { document.getElementById(id).classList.replace("hidden", "flex"); }
     function cerrarModal(id) { document.getElementById(id).classList.replace("flex", "hidden"); }
-    function convertirABase64(file) {
-      return new Promise((res, rej) => {
-        const reader = new FileReader();
-        reader.onload = () => res(reader.result.split(",")[1]);
-        reader.onerror = rej;
-        reader.readAsDataURL(file);
-      });
-    }
   </script>
 </body>
 </html>
